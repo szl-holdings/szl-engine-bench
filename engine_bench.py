@@ -210,6 +210,7 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120):
                 f"expected text/event-stream response, received {content_type}"
             )
         for raw in response:
+            arrival = time.perf_counter() - started
             line = raw.decode("utf-8", "strict").strip()
             if not line or line.startswith(":"):
                 continue
@@ -233,7 +234,7 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120):
                 raise ValueError("stream choices must be an array")
             text = (choices[0] if choices else {}).get("text", "")
             if text:
-                chunk_times.append(time.perf_counter() - started)
+                chunk_times.append(arrival)
     if not saw_done:
         raise ValueError("stream ended before the [DONE] event")
     total_ms = round((time.perf_counter() - started) * 1000.0, 3)
@@ -245,10 +246,14 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120):
 def _validate_endpoint(endpoint):
     try:
         parsed = urllib.parse.urlsplit(endpoint)
+        hostname = parsed.hostname
+        port = parsed.port
     except (TypeError, ValueError):
         return "endpoint must be a valid HTTP(S) URL"
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+    if parsed.scheme not in ("http", "https") or not hostname:
         return "endpoint must be an absolute HTTP(S) URL"
+    if port == 0:
+        return "endpoint port must be from 1 through 65535"
     if parsed.username is not None or parsed.password is not None:
         return "endpoint URL must not embed credentials"
     if parsed.query or parsed.fragment:
@@ -543,9 +548,11 @@ def _result_receipt_record(results, verdict, args):
         "benchmark_version": __version__,
         "config": {
             "model": args.model,
+            "engines": args.engines,
             "runs": args.runs,
             "max_tokens": args.max_tokens,
             "slo_ttft_ms": args.slo_ttft_ms,
+            "timeout_seconds": args.timeout_seconds,
             "prompt_sha256": hashlib.sha256(args.prompt.encode("utf-8")).hexdigest(),
         },
         "verdict": verdict,
@@ -586,18 +593,23 @@ def main():
     args = parser.parse_args()
 
     chain = ReceiptChain()
-    results = [
-        run_engine(
-            engine,
-            args.model,
-            args.prompt,
-            args.runs,
-            args.max_tokens,
-            timeout=args.timeout_seconds,
-        )
-        for engine in args.engines
-    ]
-    verdict = compare(results, args.slo_ttft_ms)
+    if len(args.engines) != len(set(args.engines)):
+        reason = "duplicate engine selections are invalid"
+        results = [{"state": "INVALID", "engine": "selection", "reason": reason}]
+        verdict = {"state": "INVALID", "reason": reason}
+    else:
+        results = [
+            run_engine(
+                engine,
+                args.model,
+                args.prompt,
+                args.runs,
+                args.max_tokens,
+                timeout=args.timeout_seconds,
+            )
+            for engine in args.engines
+        ]
+        verdict = compare(results, args.slo_ttft_ms)
     receipt = chain.emit(_result_receipt_record(results, verdict, args))
     print(
         json.dumps(

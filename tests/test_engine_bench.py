@@ -178,6 +178,50 @@ def test_measure_once_rejects_wrong_content_type_deterministically(monkeypatch):
         eb.measure_once("https://example.invalid", "m", "p", 1)
 
 
+def test_chunk_arrival_is_timestamped_before_json_parsing(monkeypatch):
+    clock = {"value": 0.0}
+    original_loads = eb.json.loads
+
+    class EventHeaders:
+        @staticmethod
+        def get_content_type():
+            return "text/event-stream"
+
+    class EventResponse:
+        headers = EventHeaders()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def __iter__(self):
+            events = [
+                (0.1, b'data: {"choices":[{"text":"a"}]}\n'),
+                (1.2, b'data: {"choices":[{"text":"b"}]}\n'),
+                (2.3, b"data: [DONE]\n"),
+            ]
+            for timestamp, event in events:
+                clock["value"] = timestamp
+                yield event
+
+    def slow_loads(payload):
+        result = original_loads(payload)
+        clock["value"] += 1.0
+        return result
+
+    monkeypatch.setattr(eb.time, "perf_counter", lambda: clock["value"])
+    monkeypatch.setattr(eb.json, "loads", slow_loads)
+    monkeypatch.setattr(
+        eb.urllib.request, "urlopen", lambda request, timeout: EventResponse()
+    )
+
+    result = eb.measure_once("https://example.invalid", "m", "p", 2)
+    assert result["state"] == "MEASURED"
+    assert result["ttft_ms"] == 100.0
+
+
 def test_stream_without_done_event_is_failed(server_factory, monkeypatch):
     monkeypatch.setenv("VLLM_ENDPOINT", server_factory(MissingDoneEngine))
     result = eb.run_engine("vllm", "mock-1", "hi", 1, 6)
@@ -224,6 +268,17 @@ def test_endpoint_with_embedded_credentials_is_invalid(monkeypatch):
     result = eb.run_engine("vllm", "m", "p", 1, 4)
     assert result["state"] == "INVALID"
     assert "credentials" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    ["http://host:notaport", "http://host:99999", "http://host:0"],
+)
+def test_endpoint_with_invalid_port_is_invalid(monkeypatch, endpoint):
+    monkeypatch.setenv("VLLM_ENDPOINT", endpoint)
+    result = eb.run_engine("vllm", "m", "p", 1, 4)
+    assert result["state"] == "INVALID"
+    assert "endpoint" in result["reason"]
 
 
 def test_percentile_uses_linear_interpolation_and_sorts_values():
@@ -359,7 +414,13 @@ def test_receipt_record_anchors_results_and_gap_hashes():
         "run_samples": [{"itl_gaps_sha256": "b" * 64}],
     }
     args = argparse.Namespace(
-        model="m", runs=1, max_tokens=4, slo_ttft_ms=200.0, prompt="p"
+        model="m",
+        engines=["a"],
+        runs=1,
+        max_tokens=4,
+        slo_ttft_ms=200.0,
+        timeout_seconds=120.0,
+        prompt="p",
     )
     record = eb._result_receipt_record([result], {"state": "BLOCKED"}, args)
 
@@ -383,6 +444,28 @@ def test_cli_without_endpoints_emits_blocked_receipted_json(monkeypatch, capsys)
     assert output["results"][0]["state"] == "BLOCKED"
     assert output["receipt"]["run"]["itl_gaps_sha256"] == {}
     assert output["receipt"]["run"]["itl_run_gaps_sha256"] == {}
+    assert output["chain_valid"] is True
+
+
+def test_cli_rejects_duplicate_engines_before_measurement(monkeypatch, capsys):
+    monkeypatch.setenv("VLLM_ENDPOINT", "https://example.invalid")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["engine_bench.py", "--engines", "vllm", "vllm", "--runs", "1"],
+    )
+    eb.main()
+    output = json.loads(capsys.readouterr().out)
+
+    assert output["results"] == [
+        {
+            "state": "INVALID",
+            "engine": "selection",
+            "reason": "duplicate engine selections are invalid",
+        }
+    ]
+    assert output["comparison"]["state"] == "INVALID"
+    assert output["receipt"]["run"]["config"]["engines"] == ["vllm", "vllm"]
     assert output["chain_valid"] is True
 
 

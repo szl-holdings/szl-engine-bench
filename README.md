@@ -83,7 +83,10 @@ python engine_bench.py --engines vllm sglang --model YOUR_MODEL --runs 10 --max-
 Supported variables are `VLLM_ENDPOINT`, `SGLANG_ENDPOINT`,
 `LLAMACPP_ENDPOINT`, `MLX_ENDPOINT`, `TGI_ENDPOINT`, and
 `TRANSFORMERS_ENDPOINT`. Each must be an absolute HTTP(S) base URL without
-embedded credentials. The client posts to `/v1/completions`.
+embedded credentials, query parameters, fragments, or an invalid TCP port.
+Duplicate names in `--engines` are rejected as `INVALID` before any request,
+so receipt maps cannot silently overwrite a result. The client posts to
+`/v1/completions`.
 
 ## Receipts
 
@@ -93,7 +96,7 @@ The receipt anchors:
 
 - a canonical SHA-256 of every complete engine result;
 - a canonical SHA-256 of each measured engine's nested ITL gap arrays;
-- the benchmark configuration and a prompt hash; and
+- the ordered engine selection, benchmark configuration, and a prompt hash; and
 - the comparison verdict and every engine state.
 
 Each run sample also includes its raw `itl_gaps_ms` array and matching
