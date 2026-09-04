@@ -30,9 +30,10 @@ from a different workload is not evidence for this one.
 
 ITL is measured between non-empty SSE response chunks. An SSE chunk is not
 assumed to equal one model token. `chunks_per_s` is always labeled as such;
-`tok_per_s` is `UNAVAILABLE` unless the endpoint itself supplies an integer
-`usage.completion_tokens` value. This avoids turning packet counts into fake
-token throughput.
+the request asks the server for streamed usage with
+`stream_options.include_usage=true`, and `tok_per_s` is `UNAVAILABLE` unless
+the endpoint actually supplies an integer `usage.completion_tokens` value.
+This avoids turning packet counts into fake token throughput.
 
 The comparison keeps the v0.1.0 fairness gates: measured engines must use the
 same model string and run count. `goodput_at_slo` is the auditable fraction of
