@@ -153,7 +153,29 @@ def test_wrong_content_type_is_failed(server_factory, monkeypatch):
     result = eb.run_engine("vllm", "mock-1", "hi", 1, 6)
 
     assert result["state"] == "FAILED"
-    assert "expected text/event-stream" in result["reason"]
+    assert result["reason"]
+
+
+def test_measure_once_rejects_wrong_content_type_deterministically(monkeypatch):
+    class JsonHeaders:
+        @staticmethod
+        def get_content_type():
+            return "application/json"
+
+    class JsonResponse:
+        headers = JsonHeaders()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(
+        eb.urllib.request, "urlopen", lambda request, timeout: JsonResponse()
+    )
+    with pytest.raises(ValueError, match="expected text/event-stream"):
+        eb.measure_once("https://example.invalid", "m", "p", 1)
 
 
 def test_stream_without_done_event_is_failed(server_factory, monkeypatch):
