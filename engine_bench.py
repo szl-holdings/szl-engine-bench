@@ -189,6 +189,7 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120):
             "prompt": prompt,
             "max_tokens": max_tokens,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
     ).encode("utf-8")
     request = urllib.request.Request(
