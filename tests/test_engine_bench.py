@@ -22,6 +22,11 @@ class MockEngine(BaseHTTPRequestHandler):
     send_done = True
 
     def do_POST(self):
+        content_length = int(self.headers.get("Content-Length", "0"))
+        request = json.loads(self.rfile.read(content_length))
+        if request.get("stream_options") != {"include_usage": True}:
+            self.send_error(400, "stream usage was not requested")
+            return
         self.send_response(200)
         self.send_header("Content-Type", self.content_type)
         self.end_headers()
@@ -55,6 +60,8 @@ class WrongContentTypeEngine(MockEngine):
     content_type = "application/json"
 
     def do_POST(self):
+        content_length = int(self.headers.get("Content-Length", "0"))
+        self.rfile.read(content_length)
         body = b'{"not":"a stream"}'
         self.send_response(200)
         self.send_header("Content-Type", self.content_type)
