@@ -1,0 +1,43 @@
+{
+  "schema": "szl.engine-comparison/v1",
+  "claim_boundary": "OPERATOR_DECLARED_NOT_RUNTIME_ATTESTED",
+  "subject": {
+    "model_id": "fixture-model",
+    "model_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "weights_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "tokenizer_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "tokenizer_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "template_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "adapter_sha256": null,
+    "quantization": "none",
+    "precision": "float16"
+  },
+  "workload": {
+    "suite_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "prompt_sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+    "runs": 1,
+    "max_tokens": 6,
+    "timeout_seconds": 2,
+    "sampling": {
+      "temperature": 0,
+      "top_p": 1,
+      "seed": 42
+    },
+    "concurrency": 1,
+    "cache_state": "UNCONTROLLED"
+  },
+  "engines": {
+    "vllm": {
+      "build_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "configuration_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "hardware_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "endpoint_sha256": "4fb24781531235a7399d4d179f1411f0d1d5c1b60c3c49ec5b1d0fa310903dcf"
+    },
+    "sglang": {
+      "build_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "configuration_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "hardware_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "endpoint_sha256": "4fb24781531235a7399d4d179f1411f0d1d5c1b60c3c49ec5b1d0fa310903dcf"
+    }
+  }
+}
