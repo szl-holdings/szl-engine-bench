@@ -431,7 +431,7 @@ def test_receipt_record_anchors_results_and_gap_hashes():
     )
     record = eb._result_receipt_record([result], {"state": "BLOCKED"}, args)
 
-    assert record["benchmark_version"] == "0.2.0"
+    assert record["benchmark_version"] == "0.3.0"
     assert record["itl_gaps_sha256"] == {"a": "a" * 64}
     assert record["itl_run_gaps_sha256"] == {"a": ["b" * 64]}
     assert record["result_sha256"]["a"] == eb._sha256_canonical(result)
@@ -447,7 +447,7 @@ def test_cli_without_endpoints_emits_blocked_receipted_json(monkeypatch, capsys)
     eb.main()
     output = json.loads(capsys.readouterr().out)
 
-    assert output["benchmark_version"] == "0.2.0"
+    assert output["benchmark_version"] == "0.3.0"
     assert output["results"][0]["state"] == "BLOCKED"
     assert output["receipt"]["run"]["itl_gaps_sha256"] == {}
     assert output["receipt"]["run"]["itl_run_gaps_sha256"] == {}
@@ -480,4 +480,4 @@ def test_module_and_package_versions_match():
     project = tomllib.loads(
         (Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     )
-    assert eb.__version__ == project["project"]["version"] == "0.2.0"
+    assert eb.__version__ == project["project"]["version"] == "0.3.0"
