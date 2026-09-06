@@ -20,7 +20,9 @@ import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 
-__version__ = "0.2.0"
+import benchmark_manifest as bm
+
+__version__ = "0.3.0"
 
 ENGINES = {
     "vllm": "VLLM_ENDPOINT",
@@ -181,17 +183,14 @@ def run_stats(chunk_times, token_count=None):
     }
 
 
-def measure_once(endpoint, model, prompt, max_tokens, timeout=120):
+class _NoBenchmarkRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("bound benchmark requests cannot follow redirects")
+
+
+def measure_once(endpoint, model, prompt, max_tokens, timeout=120, sampling=None):
     """Execute one streaming request and retain real non-empty chunk arrivals."""
-    body = json.dumps(
-        {
-            "model": model,
-            "prompt": prompt,
-            "max_tokens": max_tokens,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
-    ).encode("utf-8")
+    body = bm.canonical(bm.request_payload(model, prompt, max_tokens, sampling))
     request = urllib.request.Request(
         endpoint.rstrip("/") + "/v1/completions",
         data=body,
@@ -204,7 +203,9 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120):
     chunk_times = []
     completion_tokens = None
     saw_done = False
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    opener = (urllib.request.urlopen if sampling is None else
+              urllib.request.build_opener(_NoBenchmarkRedirect()).open)
+    with opener(request, timeout=timeout) as response:
         content_type = response.headers.get_content_type()
         if content_type != "text/event-stream":
             raise ValueError(
@@ -241,6 +242,7 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120):
     total_ms = round((time.perf_counter() - started) * 1000.0, 3)
     stats = run_stats(chunk_times, completion_tokens)
     stats["total_ms"] = total_ms
+    stats["request_sha256"] = hashlib.sha256(body).hexdigest()
     return stats
 
 
@@ -262,7 +264,7 @@ def _validate_endpoint(endpoint):
     return None
 
 
-def run_engine(name, model, prompt, runs, max_tokens, timeout=120):
+def run_engine(name, model, prompt, runs, max_tokens, timeout=120, sampling=None, endpoint_override=None):
     if name not in ENGINES:
         return {"state": "INVALID", "engine": name, "reason": "unknown engine name"}
     if not isinstance(model, str) or not model.strip():
@@ -301,7 +303,7 @@ def run_engine(name, model, prompt, runs, max_tokens, timeout=120):
         }
 
     variable = ENGINES[name]
-    endpoint = os.environ.get(variable)
+    endpoint = endpoint_override if endpoint_override is not None else os.environ.get(variable)
     if not endpoint:
         return {
             "state": "BLOCKED",
@@ -316,7 +318,7 @@ def run_engine(name, model, prompt, runs, max_tokens, timeout=120):
     try:
         for run_index in range(runs):
             sample = measure_once(
-                endpoint, model, prompt, max_tokens, timeout=float(timeout)
+                endpoint, model, prompt, max_tokens, timeout=float(timeout), sampling=sampling
             )
             if sample.get("state") != "MEASURED":
                 return {
@@ -448,6 +450,8 @@ def compare_engines(a_runs, b_runs, slo_ttft_ms=200):
         "a": _goodput_summary(a_ttfts, slo),
         "b": _goodput_summary(b_ttfts, slo),
         "label": "TTFT and goodput; inspect ITL separately, never one winner",
+        "comparison_scope": "UNBOUND_METRICS_ONLY",
+        "production_admission": "NOT_EVALUATED",
     }
 
 
@@ -539,13 +543,72 @@ def compare(runs, slo_ttft_ms=200):
         "slo_ttft_ms": round(slo, 3),
         "engines": metrics,
         "label": "TTFT, ITL, and goodput; never a single-number winner",
+        "comparison_scope": "UNBOUND_METRICS_ONLY",
+        "production_admission": "NOT_EVALUATED",
     }
+
+
+def compare_bound(results, manifest, slo_ttft_ms=200):
+    """Compare the complete declared cohort; never call declarations attestation."""
+    try:
+        manifest = bm.validate_manifest(manifest)
+        if not isinstance(results, list) or any(not isinstance(r, dict) for r in results):
+            raise bm.ManifestError("comparison requires a list of result objects")
+        bm.verify_result_bindings(manifest, results)
+    except bm.ManifestError as exc:
+        return {"state": "INVALID", "reason": str(exc), "production_admission": "NOT_EVALUATED"}
+    verdict = compare(results, slo_ttft_ms)
+    if verdict["state"] == "MEASURED":
+        verdict.update(
+            comparison_scope="DECLARED_SAME_WORKLOAD_AND_HARDWARE",
+            manifest_sha256=bm.digest(manifest),
+            subject_sha256=bm.digest(manifest["subject"]),
+            claim_boundary=bm.BOUNDARY,
+            runtime_identity="NOT_ATTESTED",
+            cache_state="UNCONTROLLED",
+            quality_evaluation="NOT_PERFORMED",
+        )
+    return verdict
+
+
+def run_declared(args, manifest):
+    """Validate the entire cohort before the first request; preserve every failure."""
+    try:
+        manifest = bm.validate_manifest(manifest)
+        endpoints = {name: os.environ.get(ENGINES[name], "") for name in args.engines}
+        if set(endpoints) != set(manifest["engines"]):
+            raise bm.ManifestError("selected engines must exactly match the manifest")
+        if any(not endpoint for endpoint in endpoints.values()):
+            return [], {"state": "BLOCKED", "reason": "a declared engine endpoint is not configured"}
+        if any(_validate_endpoint(endpoint) or any(ord(c) < 33 for c in endpoint)
+               for endpoint in endpoints.values()):
+            raise bm.ManifestError("a declared engine endpoint is invalid")
+        manifest = bm.preflight(manifest, model=args.model, prompt=args.prompt,
+                                runs=args.runs, max_tokens=args.max_tokens,
+                                timeout=args.timeout_seconds, endpoints=endpoints)
+    except bm.ManifestError as exc:
+        return [], {"state": "INVALID", "reason": str(exc)}
+    sampling = manifest["workload"]["sampling"]
+    request_hash = bm.digest(bm.request_payload(args.model, args.prompt, args.max_tokens, sampling))
+    results = []
+    for name in args.engines:
+        # This harness makes serial requests; no load, cache-reset, or warmup claim.
+        result = run_engine(name, args.model, args.prompt, args.runs, args.max_tokens,
+                            timeout=args.timeout_seconds, sampling=sampling, endpoint_override=endpoints[name])
+        result["binding"] = bm.run_binding(manifest, name, request_hash)
+        results.append(result)
+    if any(result["state"] != "MEASURED" for result in results):
+        return results, {"state": "BLOCKED", "reason": "declared cohort did not complete; no engines discarded",
+                         "manifest_sha256": bm.digest(manifest)}
+    return results, compare_bound(results, manifest, args.slo_ttft_ms)
 
 
 def _result_receipt_record(results, verdict, args):
     return {
         "type": "engine_bench",
-        "schema_version": 2,
+        "schema_version": 3,
+        "manifest_sha256": getattr(args, "manifest_sha256", None),
+        "production_admission": "NOT_EVALUATED",
         "benchmark_version": __version__,
         "config": {
             "model": args.model,
@@ -591,13 +654,30 @@ def main():
     parser.add_argument(
         "--engines", nargs="*", choices=sorted(ENGINES), default=list(ENGINES)
     )
+    parser.add_argument("--manifest", help="bounded operator-declared comparison manifest JSON")
+    parser.add_argument("--unbound-diagnostics", action="store_true",
+                        help="explicit legacy measurements; not an identity-qualified comparison")
     args = parser.parse_args()
+    args.manifest_sha256 = None
 
     chain = ReceiptChain()
     if len(args.engines) != len(set(args.engines)):
         reason = "duplicate engine selections are invalid"
         results = [{"state": "INVALID", "engine": "selection", "reason": reason}]
         verdict = {"state": "INVALID", "reason": reason}
+    elif args.manifest and args.unbound_diagnostics:
+        results, verdict = [], {"state": "INVALID", "reason": "manifest and unbound diagnostics are mutually exclusive"}
+    elif args.manifest:
+        try:
+            manifest = bm.load_manifest(args.manifest)
+            args.manifest_sha256 = bm.digest(manifest)
+            results, verdict = run_declared(args, manifest)
+        except bm.ManifestError as exc:
+            results, verdict = [], {"state": "INVALID", "reason": str(exc)}
+    elif not args.unbound_diagnostics:
+        reason = "comparison requires --manifest; --unbound-diagnostics is explicitly unqualified"
+        results = [{"state": "BLOCKED", "engine": name, "reason": reason} for name in args.engines]
+        verdict = {"state": "BLOCKED", "reason": reason}
     else:
         results = [
             run_engine(
@@ -611,6 +691,7 @@ def main():
             for engine in args.engines
         ]
         verdict = compare(results, args.slo_ttft_ms)
+    verdict.setdefault("production_admission", "NOT_EVALUATED")
     receipt = chain.emit(_result_receipt_record(results, verdict, args))
     print(
         json.dumps(
@@ -626,7 +707,10 @@ def main():
             allow_nan=False,
         )
     )
+    # Explicit declared experiments fail the calling job when incomplete. The
+    # credentialless default demonstration retains its historical zero exit.
+    return 2 if args.manifest and verdict["state"] != "MEASURED" else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
