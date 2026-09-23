@@ -60,6 +60,20 @@ def _number(value: Any, minimum: float, maximum: float, field: str) -> None:
         raise ManifestError(f"{field}: finite number outside allowed range")
 
 
+def _metric_triplet(value: Any, field: str) -> None:
+    """Require one physically possible p50/p95/p99 latency summary."""
+    value = _keys(value, {"p50", "p95", "p99"}, field)
+    metrics = []
+    for percentile in ("p50", "p95", "p99"):
+        metric = value[percentile]
+        if (type(metric) not in (int, float) or not math.isfinite(metric)
+                or metric < 0):
+            raise ManifestError(f"{field}: percentiles must be finite non-negative numbers")
+        metrics.append(float(metric))
+    if metrics != sorted(metrics):
+        raise ManifestError(f"{field}: percentiles must be monotonic p50 <= p95 <= p99")
+
+
 def sampling_parameters(value: Any) -> dict:
     value = _keys(value, {"temperature", "top_p", "seed"}, "sampling")
     _number(value["temperature"], 0, 2, "temperature")
@@ -207,6 +221,7 @@ def verify_result_bindings(manifest: dict, results: list[dict]) -> None:
             raise ManifestError("result model differs from the declaration")
         if type(result.get("runs")) is not int or result["runs"] != manifest["workload"]["runs"]:
             raise ManifestError("result run count differs from the declaration")
+        _metric_triplet(result.get("itl_ms"), "itl_ms")
         endpoint = result.get("endpoint")
         if not isinstance(endpoint, str) or endpoint_digest(endpoint) != binding["endpoint_sha256"]:
             raise ManifestError("result endpoint differs from its binding")
