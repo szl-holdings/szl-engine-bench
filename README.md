@@ -1,6 +1,6 @@
 # szl-engine-bench
 
-[![PyPI](https://img.shields.io/pypi/v/szl-engine-bench)](https://pypi.org/project/szl-engine-bench/) [![Python](https://img.shields.io/pypi/pyversions/szl-engine-bench)](https://pypi.org/project/szl-engine-bench/)
+[![PyPI](https://img.shields.io/pypi/v/szl-engine-bench)](https://pypi.org/project/szl-engine-bench/) [![Python](https://img.shields.io/pypi/pyversions/szl-engine-bench)](https://pypi.org/project/szl-engine-bench/) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/szl-holdings/szl-engine-bench/badge)](https://scorecard.dev/viewer/?uri=github.com/szl-holdings/szl-engine-bench)
 
 An honest, standard-library-only benchmark client for OpenAI-compatible
 streaming endpoints exposed by vLLM, SGLang, llama.cpp, MLX, TGI, and
