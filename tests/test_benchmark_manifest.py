@@ -11,8 +11,8 @@ from http.server import BaseHTTPRequestHandler
 
 import pytest
 
-import benchmark_manifest as bm
-import engine_bench as eb
+from szl_engine_bench import benchmark_manifest as bm
+from szl_engine_bench import engine_bench as eb
 from test_engine_bench import MockEngine, server_factory
 
 

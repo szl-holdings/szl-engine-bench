@@ -20,9 +20,9 @@ import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 
-import benchmark_manifest as bm
+from . import benchmark_manifest as bm
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 ENGINES = {
     "vllm": "VLLM_ENDPOINT",

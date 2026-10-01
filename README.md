@@ -49,8 +49,8 @@ inclusive. It is not claimed to be a maximum sustainable request rate.
 ```bash
 python -m pip install -e . pytest
 python -m pytest tests -q
-python -m compileall -q engine_bench.py benchmark_manifest.py tests
-python engine_bench.py --engines vllm --runs 1
+python -m compileall -q szl_engine_bench tests
+python -m szl_engine_bench --engines vllm --runs 1
 ```
 
 The last command is a fail-closed smoke test: without a declaration it emits
@@ -61,7 +61,7 @@ The deterministic burst fixture from issue #2 can be reproduced without an
 endpoint:
 
 ```bash
-python -c "import engine_bench as e; print(e.run_stats([.05,.06,.07,.4,.45,.5,.55,.6], 8))"
+python -c "from szl_engine_bench import engine_bench as e; print(e.run_stats([.05,.06,.07,.4,.45,.5,.55,.6], 8))"
 ```
 
 Its TTFT is 50 ms. The inter-chunk gaps are 10, 10, 330, 50, 50, 50, and
@@ -97,7 +97,7 @@ hashes. SHA checks use full-string matching, not permissive end anchors.
 | Hardware SHA-256 | Same retained hardware-profile digest across the declared cohort |
 | Endpoint SHA-256 | SHA-256 of the exact configured base URL after removing trailing slashes; no credentials allowed |
 
-`benchmark_manifest.endpoint_digest()` computes the endpoint digest. File digests
+`szl_engine_bench.benchmark_manifest.endpoint_digest()` computes the endpoint digest. File digests
 refer to exact bytes; they are not a cryptographic demonstration that a remote
 server loaded those bytes. Engine names must match the supported registry. The
 client runs serially, performs no warmup/reset, and requires `concurrency: 1` and
@@ -132,7 +132,7 @@ PowerShell:
 ```powershell
 $env:VLLM_ENDPOINT = "http://127.0.0.1:8000"
 $env:SGLANG_ENDPOINT = "http://127.0.0.1:30000"
-python engine_bench.py --engines vllm sglang --model YOUR_MODEL --runs 10 --max-tokens 64 --slo-ttft-ms 200 --manifest comparison.json
+python -m szl_engine_bench --engines vllm sglang --model YOUR_MODEL --runs 10 --max-tokens 64 --slo-ttft-ms 200 --manifest comparison.json
 ```
 
 POSIX shells:
@@ -140,7 +140,7 @@ POSIX shells:
 ```bash
 export VLLM_ENDPOINT=http://127.0.0.1:8000
 export SGLANG_ENDPOINT=http://127.0.0.1:30000
-python engine_bench.py --engines vllm sglang --model YOUR_MODEL --runs 10 --max-tokens 64 --slo-ttft-ms 200 --manifest comparison.json
+python -m szl_engine_bench --engines vllm sglang --model YOUR_MODEL --runs 10 --max-tokens 64 --slo-ttft-ms 200 --manifest comparison.json
 ```
 
 Supported variables are `VLLM_ENDPOINT`, `SGLANG_ENDPOINT`,
