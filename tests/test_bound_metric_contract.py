@@ -5,8 +5,8 @@ from __future__ import annotations
 import copy
 import hashlib
 
-import benchmark_manifest as bm
-import engine_bench as eb
+from szl_engine_bench import benchmark_manifest as bm
+from szl_engine_bench import engine_bench as eb
 
 
 def _manifest(endpoint: str = "http://127.0.0.1:9876") -> dict:

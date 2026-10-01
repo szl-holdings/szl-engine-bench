@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "szl-engine-bench"
-version = "0.3.1"
+version = "0.3.2"
 description = "Honest inference-engine benchmark harness: TTFT, ITL, goodput-at-SLO, fairness gates, and hash-chained receipts."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,6 +16,9 @@ classifiers = [
 ]
 license = {text = "Apache-2.0"}
 
+[project.scripts]
+szl-engine-bench = "szl_engine_bench.engine_bench:main"
+
 [project.urls]
 Homepage = "https://github.com/szl-holdings/szl-engine-bench"
 Source = "https://github.com/szl-holdings/szl-engine-bench"
@@ -23,10 +26,10 @@ Issues = "https://github.com/szl-holdings/szl-engine-bench/issues"
 Changelog = "https://github.com/szl-holdings/szl-engine-bench/releases"
 
 [tool.setuptools]
-py-modules = ["engine_bench", "benchmark_manifest"]
+packages = ["szl_engine_bench"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.szl.release]
-import_names = ["benchmark_manifest", "engine_bench"] # wheel top-level import names; the release gate fails if the built wheel differs
+import_names = ["szl_engine_bench"] # wheel top-level import names; the release gate fails if the built wheel differs
