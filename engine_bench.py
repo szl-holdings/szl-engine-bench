@@ -22,7 +22,7 @@ from collections.abc import Mapping
 
 import benchmark_manifest as bm
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 ENGINES = {
     "vllm": "VLLM_ENDPOINT",
