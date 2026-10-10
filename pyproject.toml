@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "szl-engine-bench"
-version = "0.3.2"
+version = "0.3.3"
 description = "Honest inference-engine benchmark harness: TTFT, ITL, goodput-at-SLO, fairness gates, and hash-chained receipts."
 readme = "README.md"
 requires-python = ">=3.11"
