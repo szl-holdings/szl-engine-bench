@@ -29,6 +29,9 @@ from a different workload is not evidence for this one.
 - `INVALID`: configuration, stream shape, or fairness inputs were unsuitable
   for the requested metric.
 - `FAILED`: the configured endpoint or streaming protocol actually failed.
+- `DECLARED`: `prefix_reuse_receipt` accepted a caller-supplied prefix hash,
+  token counts, UTF-8 byte cap, and token cap. This state is not `MEASURED`.
+  The prefix hash is not checked against the prompt, and no engine is contacted.
 
 ITL is measured between non-empty SSE response chunks. An SSE chunk is not
 assumed to equal one model token. `chunks_per_s` is always labeled as such;

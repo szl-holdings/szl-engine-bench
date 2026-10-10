@@ -9,6 +9,6 @@ Namespaced in 0.3.2: the former top-level modules ``engine_bench`` and
 claims generic import names. Run the CLI with ``szl-engine-bench`` or
 ``python -m szl_engine_bench``.
 """
-from . import benchmark_manifest, engine_bench  # noqa: F401
+from . import benchmark_manifest, engine_bench, prefix_reuse  # noqa: F401
 
-__all__ = ["benchmark_manifest", "engine_bench"]
+__all__ = ["benchmark_manifest", "engine_bench", "prefix_reuse"]
