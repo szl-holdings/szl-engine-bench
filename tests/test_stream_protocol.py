@@ -80,5 +80,29 @@ for name, value in [('null', None), ('dict', {}), ('bool', False), ('number', 17
 for name, value in [('null', None), ('list', []), ('bool', False), ('number', 17), ('string', 'bad')]:
     install_case('choice_' + name, {'choices': [value]}, 'choice must be an object')
 install_case('second_choice_invalid', {'choices': [{'text': 'valid'}, {'text': 17}]}, 'text must be a string')
+class UsageShapeTests(unittest.TestCase):
+    measure = StreamProtocolTests.measure
+
+    def test_non_object_usage_is_rejected_in_both_transport_paths(self):
+        for value in (False, True, 0, 17, [], [1], "bad"):
+            for sampling in (None, {"temperature": 0, "top_p": 1, "seed": 7}):
+                for before_text in (False, True):
+                    with self.subTest(value=value, sampling=sampling, before_text=before_text):
+                        usage = event({"choices": [], "usage": value})
+                        chunks = [usage, text("a"), text("b")] if before_text else [text("a"), text("b"), usage]
+                        with self.assertRaisesRegex(ValueError, "usage must be an object"):
+                            self.measure(chunks + [DONE], sampling)
+
+    def test_optional_and_valid_usage_preserve_unknown_or_reported_counts(self):
+        for payload, expected in (({}, None), ({"usage": None}, None), ({"usage": {}}, None),
+                                  ({"usage": {"completion_tokens": None}}, None),
+                                  ({"usage": {"completion_tokens": 0}}, 0),
+                                  ({"usage": {"completion_tokens": 2}}, 2)):
+            with self.subTest(payload=payload):
+                result = self.measure([text("a"), event({"choices": [], **payload}), text("b"), DONE])
+                self.assertEqual(result["state"], "MEASURED")
+                self.assertEqual(result["chunks"], 2)
+                self.assertEqual(result["completion_tokens"], expected)
+
 if __name__ == '__main__':
     unittest.main()

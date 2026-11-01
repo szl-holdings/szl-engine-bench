@@ -231,6 +231,8 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120, sampling=None
             if "error" in chunk:
                 raise ValueError("stream contained a provider error")
             usage = chunk.get("usage")
+            if usage is not None and not isinstance(usage, Mapping):
+                raise ValueError("stream usage must be an object or null")
             if isinstance(usage, Mapping) and "completion_tokens" in usage:
                 completion_tokens = usage["completion_tokens"]
             choices = chunk.get("choices", [])
