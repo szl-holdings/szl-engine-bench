@@ -52,11 +52,12 @@ def _sha256_canonical(obj):
 
 
 def _finite_number(value):
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-    )
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
 
 
 class ReceiptChain:
@@ -113,7 +114,12 @@ def percentile(values, p):
     position = (len(ordered) - 1) * (float(p) / 100.0)
     lower = int(math.floor(position))
     upper = min(lower + 1, len(ordered) - 1)
-    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
+    fraction = position - lower
+    if ordered[lower] < 0 < ordered[upper]:
+        # Subtracting opposite-sign finite endpoints can overflow even though
+        # every percentile lies between those endpoints.
+        return ordered[lower] * (1 - fraction) + ordered[upper] * fraction
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
 def run_stats(chunk_times, token_count=None):
@@ -152,12 +158,23 @@ def run_stats(chunk_times, token_count=None):
             "detail": "token_count must be a non-negative integer or null",
         }
 
-    gaps_ms = [
-        round((current - previous) * 1000.0, 6)
-        for previous, current in zip(times, times[1:])
-    ]
     last_arrival = times[-1]
-    ttft_ms = round(times[0] * 1000.0, 3)
+    try:
+        gaps_ms = [(current - previous) * 1000.0
+                   for previous, current in zip(times, times[1:])]
+        ttft_ms = times[0] * 1000.0
+        last_chunk_ms = last_arrival * 1000.0
+        token_rate = (token_count / last_arrival
+                      if token_count is not None and last_arrival > 0 else None)
+        chunk_rate = len(times) / last_arrival if last_arrival > 0 else None
+    except OverflowError:
+        return {"state": "INVALID", "detail": "derived stream metrics must be finite"}
+    derived = gaps_ms + [ttft_ms, last_chunk_ms]
+    derived.extend(value for value in (token_rate, chunk_rate) if value is not None)
+    if any(not _finite_number(value) for value in derived):
+        return {"state": "INVALID", "detail": "derived stream metrics must be finite"}
+    gaps_ms = [round(value, 6) for value in gaps_ms]
+    ttft_ms = round(ttft_ms, 3)
     itl_p50_ms = round(percentile(gaps_ms, 50), 3)
     itl_p95_ms = round(percentile(gaps_ms, 95), 3)
     itl_p99_ms = round(percentile(gaps_ms, 99), 3)
@@ -169,17 +186,11 @@ def run_stats(chunk_times, token_count=None):
         "itl_p99_ms": itl_p99_ms,
         "itl_gaps_ms": gaps_ms,
         "itl_gaps_sha256": _sha256_canonical(gaps_ms),
-        "last_chunk_ms": round(last_arrival * 1000.0, 3),
+        "last_chunk_ms": round(last_chunk_ms, 3),
         "chunks": len(times),
         "completion_tokens": token_count,
-        "tok_per_s": (
-            round(token_count / last_arrival, 2)
-            if token_count is not None and last_arrival > 0
-            else None
-        ),
-        "chunks_per_s": (
-            round(len(times) / last_arrival, 2) if last_arrival > 0 else None
-        ),
+        "tok_per_s": round(token_rate, 2) if token_rate is not None else None,
+        "chunks_per_s": round(chunk_rate, 2) if chunk_rate is not None else None,
     }
 
 
@@ -503,9 +514,11 @@ def compare(runs, slo_ttft_ms=200):
                 "reason": f"{result['engine']} has an invalid run count",
             }
         itl = result.get("itl_ms")
-        if not isinstance(itl, Mapping) or any(
-            not _finite_number(itl.get(key)) for key in ("p50", "p95", "p99")
-        ):
+        try:
+            if not isinstance(itl, Mapping):
+                raise bm.ManifestError("ITL metrics must be an object")
+            bm._metric_triplet({key: itl.get(key) for key in ("p50", "p95", "p99")}, "itl_ms")
+        except bm.ManifestError:
             return {
                 "state": "INVALID",
                 "reason": f"{result['engine']} has invalid ITL metrics",
