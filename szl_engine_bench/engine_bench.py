@@ -234,8 +234,12 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120, sampling=None
                 saw_done = True
                 break
             try:
-                chunk = json.loads(payload)
-            except json.JSONDecodeError as exc:
+                chunk = json.loads(
+                    payload,
+                    object_pairs_hook=bm._unique_pairs,
+                    parse_constant=bm._reject_constant,
+                )
+            except (json.JSONDecodeError, bm.ManifestError) as exc:
                 raise ValueError("stream contained invalid JSON data") from exc
             if not isinstance(chunk, Mapping):
                 raise ValueError("stream JSON data must be an object")

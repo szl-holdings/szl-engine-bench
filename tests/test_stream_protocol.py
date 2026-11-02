@@ -63,6 +63,27 @@ class StreamProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'invalid JSON'):
             self.measure([text('a'), b'data: {bad}\n', DONE])
 
+    def test_duplicate_json_fields_are_rejected_in_both_transport_paths(self):
+        payloads = (
+            b'data: {"choices":[{"text":"shadow"}],"choices":[{"text":"b"}]}\n\n',
+            b'data: {"choices":[{"text":"shadow","text":"b"}]}\n\n',
+        )
+        for sampling in (None, {"temperature": 0, "top_p": 1, "seed": 7}):
+            for payload in payloads:
+                with self.subTest(sampling=sampling, payload=payload):
+                    with self.assertRaisesRegex(ValueError, 'invalid JSON'):
+                        self.measure([text('a'), payload, DONE], sampling)
+
+    def test_nonfinite_json_constants_are_rejected_in_both_transport_paths(self):
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            payload = (
+                f'data: {{"choices":[{{"text":"b"}}],"ignored":{constant}}}\n\n'
+            ).encode()
+            for sampling in (None, {"temperature": 0, "top_p": 1, "seed": 7}):
+                with self.subTest(constant=constant, sampling=sampling):
+                    with self.assertRaisesRegex(ValueError, 'invalid JSON'):
+                        self.measure([text('a'), payload, DONE], sampling)
+
     def test_provider_error(self):
         with self.assertRaisesRegex(ValueError, 'provider error'):
             self.measure([text('a'), text('b'), event({'error': {'message': 'private'}}), DONE])
