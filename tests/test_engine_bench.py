@@ -213,8 +213,8 @@ def test_chunk_arrival_is_timestamped_before_json_parsing(monkeypatch):
                 clock["value"] = timestamp
                 yield event
 
-    def slow_loads(payload):
-        result = original_loads(payload)
+    def slow_loads(payload, **kwargs):
+        result = original_loads(payload, **kwargs)
         clock["value"] += 1.0
         return result
 
