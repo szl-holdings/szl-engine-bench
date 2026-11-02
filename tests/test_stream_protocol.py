@@ -74,8 +74,8 @@ class StreamProtocolTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'invalid JSON'):
                         self.measure([text('a'), payload, DONE], sampling)
 
-    def test_nonfinite_json_constants_are_rejected_in_both_transport_paths(self):
-        for constant in ("NaN", "Infinity", "-Infinity"):
+    def test_nonfinite_json_numbers_are_rejected_in_both_transport_paths(self):
+        for constant in ("NaN", "Infinity", "-Infinity", "1e999"):
             payload = (
                 f'data: {{"choices":[{{"text":"b"}}],"ignored":{constant}}}\n\n'
             ).encode()
