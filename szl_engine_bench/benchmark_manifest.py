@@ -66,8 +66,11 @@ def _metric_triplet(value: Any, field: str) -> None:
     metrics = []
     for percentile in ("p50", "p95", "p99"):
         metric = value[percentile]
-        if (type(metric) not in (int, float) or not math.isfinite(metric)
-                or metric < 0):
+        try:
+            finite = type(metric) in (int, float) and math.isfinite(metric)
+        except OverflowError:
+            finite = False
+        if not finite or metric < 0:
             raise ManifestError(f"{field}: percentiles must be finite non-negative numbers")
         metrics.append(float(metric))
     if metrics != sorted(metrics):
