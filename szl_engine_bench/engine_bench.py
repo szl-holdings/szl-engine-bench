@@ -60,6 +60,13 @@ def _finite_number(value):
         return False
 
 
+def _finite_json_float(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise bm.ManifestError("stream JSON contains a non-finite number")
+    return number
+
+
 class ReceiptChain:
     """Hash-chained run receipts. UNSIGNED_HONEST proves order, not identity."""
 
@@ -234,8 +241,13 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120, sampling=None
                 saw_done = True
                 break
             try:
-                chunk = json.loads(payload)
-            except json.JSONDecodeError as exc:
+                chunk = json.loads(
+                    payload,
+                    object_pairs_hook=bm._unique_pairs,
+                    parse_constant=bm._reject_constant,
+                    parse_float=_finite_json_float,
+                )
+            except (json.JSONDecodeError, bm.ManifestError) as exc:
                 raise ValueError("stream contained invalid JSON data") from exc
             if not isinstance(chunk, Mapping):
                 raise ValueError("stream JSON data must be an object")
