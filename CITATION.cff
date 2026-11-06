@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it using the metadata from this file.
+type: software
+title: szl-holdings/szl-engine-bench — Honest inference-engine benchmark harness
+version: 0.3.3
+date-released: '2026-11-05'
+license: Apache-2.0
+url: https://a-11-oy.com
+repository-code: https://github.com/szl-holdings/szl-engine-bench
+authors:
+- family-names: Lutar
+  given-names: Stephen P.
+  name-suffix: Jr.
+  orcid: https://orcid.org/0009-0001-0110-4173
+  affiliation: SZL Holdings
+keywords:
+- benchmarking
+- szl-holdings
+- python
+- inference
+- llm
+- receipts
+- governed-ai
