@@ -194,3 +194,9 @@ Loopback test responses are fixtures: no trained model, remote production system
 GPU performance, energy measurement, or quality result is represented by CI.
 
 Apache-2.0 · Doctrine v11 · SZL Holdings
+
+Estate on Hugging Face: models, datasets and Spaces are published under the [SZLHOLDINGS](https://huggingface.co/SZLHOLDINGS) org.
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).
