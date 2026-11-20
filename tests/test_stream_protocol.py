@@ -47,6 +47,33 @@ class StreamProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'text must be a string'):
             self.measure([text('a'), text(17), DONE], sampling)
 
+    def test_legacy_and_bound_requests_never_follow_redirects(self):
+        # No socket is opened: verify the actual transport's redirect handler
+        # and ensure the default urlopen bypass is never used.
+        for sampling in (None, {'temperature': 0, 'top_p': 1, 'seed': 7}):
+            with self.subTest(sampling=sampling):
+                with patch.object(engine.urllib.request, 'urlopen',
+                                  side_effect=AssertionError('unrestricted transport used')), \
+                     patch.object(engine.urllib.request, 'build_opener') as builder, \
+                     patch.object(engine.time, 'perf_counter', side_effect=itertools.count()):
+                    builder.return_value.open.return_value = Response(
+                        [text('a'), text('b'), DONE]
+                    )
+                    result = engine.measure_once(
+                        'http://synthetic.invalid', 'fixture', 'fixture', 8,
+                        sampling=sampling,
+                    )
+                    self.assertEqual(result['state'], 'MEASURED')
+                    builder.return_value.open.assert_called_once()
+                    handlers = builder.call_args.args
+                    self.assertEqual(len(handlers), 1)
+                    self.assertIsInstance(handlers[0], engine._NoBenchmarkRedirect)
+                    with self.assertRaisesRegex(ValueError, 'cannot follow redirects'):
+                        handlers[0].redirect_request(
+                            None, None, 302, 'Location', {},
+                            'http://other-host.invalid/redirect',
+                        )
+
     def test_metadata_empty_text_not_counted(self):
         result = self.measure([event({'choices': [{}]}), text(''), text('a'), event({'choices': [], 'usage': {'completion_tokens': 2}}), text('b'), DONE])
         self.assertEqual(result['chunks'], 2)
