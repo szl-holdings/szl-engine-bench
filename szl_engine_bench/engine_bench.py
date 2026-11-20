@@ -221,8 +221,8 @@ def measure_once(endpoint, model, prompt, max_tokens, timeout=120, sampling=None
     chunk_times = []
     completion_tokens = None
     saw_done = False
-    opener = (urllib.request.urlopen if sampling is None else
-              urllib.request.build_opener(_NoBenchmarkRedirect()).open)
+    # Fail closed for every request: unbound and bound streams must not redirect.
+    opener = urllib.request.build_opener(_NoBenchmarkRedirect()).open
     with opener(request, timeout=timeout) as response:
         content_type = response.headers.get_content_type()
         if content_type != "text/event-stream":

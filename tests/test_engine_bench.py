@@ -16,6 +16,20 @@ import pytest
 from szl_engine_bench import engine_bench as eb
 
 
+def _offline_bounded_transport(monkeypatch, response):
+    # The synthetic response must travel through the redirect-safe opener.
+    class OfflineOpener:
+        def open(self, request, timeout):
+            return response
+
+    def build(*handlers):
+        assert len(handlers) == 1
+        assert isinstance(handlers[0], eb._NoBenchmarkRedirect)
+        return OfflineOpener()
+
+    monkeypatch.setattr(eb.urllib.request, "build_opener", build)
+
+
 class MockEngine(BaseHTTPRequestHandler):
     tokens = ["Hash", "-chained", " receipts", " prove", " order", "."]
     include_usage = True
@@ -179,9 +193,7 @@ def test_measure_once_rejects_wrong_content_type_deterministically(monkeypatch):
         def __exit__(self, *args):
             return False
 
-    monkeypatch.setattr(
-        eb.urllib.request, "urlopen", lambda request, timeout: JsonResponse()
-    )
+    _offline_bounded_transport(monkeypatch, JsonResponse())
     with pytest.raises(ValueError, match="expected text/event-stream"):
         eb.measure_once("https://example.invalid", "m", "p", 1)
 
@@ -221,9 +233,7 @@ def test_chunk_arrival_is_timestamped_before_json_parsing(monkeypatch):
 
     monkeypatch.setattr(eb.time, "perf_counter", lambda: clock["value"])
     monkeypatch.setattr(eb.json, "loads", slow_loads)
-    monkeypatch.setattr(
-        eb.urllib.request, "urlopen", lambda request, timeout: EventResponse()
-    )
+    _offline_bounded_transport(monkeypatch, EventResponse())
 
     result = eb.measure_once("https://example.invalid", "m", "p", 2)
     assert result["state"] == "MEASURED"
